@@ -20,6 +20,8 @@ import software.amazon.kinesis.common.StreamIdentifier;
 import software.amazon.kinesis.coordinator.Scheduler;
 import software.amazon.kinesis.exceptions.InvalidStateException;
 import software.amazon.kinesis.exceptions.ShutdownException;
+import software.amazon.kinesis.leases.Lease;
+import software.amazon.kinesis.leases.LeaseRefresher;
 import software.amazon.kinesis.leases.exceptions.DependencyException;
 import software.amazon.kinesis.leases.exceptions.ProvisionedThroughputException;
 import software.amazon.kinesis.lifecycle.events.*;
@@ -33,9 +35,12 @@ import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.ByteBuffer;
+import java.nio.charset.CharacterCodingException;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Date;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Future;
@@ -56,7 +61,7 @@ public class Consumer {
      * Invoke the main method with 2 args: the stream name and (optionally) the region.
      * Verifies valid inputs and then starts running the app.
      */
-    public static void main(String... args) {
+    public static void main(String... args) throws DependencyException, ProvisionedThroughputException, software.amazon.kinesis.leases.exceptions.InvalidStateException {
         if (args.length < 1) {
             log.error("At a minimum, the stream name is required as the first argument. The Region may be specified as the second argument.");
             System.exit(1);
@@ -76,6 +81,7 @@ public class Consumer {
     private final String streamName;
     private final Region region;
     private final KinesisAsyncClient kinesisClient;
+    private final Scheduler scheduler;
 
     /**
      * Constructor sets streamName and region. It also creates a KinesisClient object to send data to Kinesis.
@@ -87,9 +93,31 @@ public class Consumer {
         this.streamName = streamName;
         this.region = Region.of(ObjectUtils.firstNonNull(region, "us-east-1"));
         this.kinesisClient = KinesisClientUtil.createKinesisAsyncClient(KinesisAsyncClient.builder().region(this.region));
+
+        this.scheduler = makeScheduler(this.applicationName,
+                                       this.streamName,
+                                       this.region);
     }
 
-    private void run() {
+    public static List<Lease> describeLeases(LeaseRefresher refresher) throws DependencyException, ProvisionedThroughputException, software.amazon.kinesis.leases.exceptions.InvalidStateException {
+
+        var leases = refresher.listLeases();
+
+        log.info("leases: {}", leases);
+
+        for (var lease: leases) {
+            var key = lease.leaseKey();
+            var checkpoint = refresher.getCheckpoint(key);
+
+            log.info("lease: {}, checkpoint: {}", key, checkpoint);
+        }
+
+        return leases;
+    }
+
+    private Scheduler makeScheduler(String applicationName,
+                                    String streamName,
+                                    Region region) {
 
         /**
          * Sets up configuration for the KCL, including DynamoDB and CloudWatch dependencies. The final argument, a
@@ -106,8 +134,8 @@ public class Consumer {
 
         var streamTracker =
                 new SingleStreamTracker(StreamIdentifier.singleStreamInstance(streamName),
-                startFrom);
-        
+                        startFrom);
+
         ConfigsBuilder configsBuilder =
                 new ConfigsBuilder(streamTracker,
                                    applicationName,
@@ -117,37 +145,35 @@ public class Consumer {
                                    UUID.randomUUID().toString(),
                                    new SampleRecordProcessorFactory());
 
+//        configsBuilder.streamTracker().streamConfigList().get(0).streamIdentifier().streamName();
+
         /**
          * The Scheduler (also called Worker in earlier versions of the KCL) is the entry point to the KCL. This
          * instance is configured with defaults provided by the ConfigsBuilder.
          */
-        Scheduler scheduler = new Scheduler(
-                configsBuilder.checkpointConfig(),
-                configsBuilder.coordinatorConfig(),
-                configsBuilder.leaseManagementConfig(),
-                configsBuilder.lifecycleConfig(),
-                configsBuilder.metricsConfig(),
-                configsBuilder.processorConfig(),
-                configsBuilder.retrievalConfig().retrievalSpecificConfig(new PollingConfig(streamName, kinesisClient))
-        );
+        return new Scheduler( configsBuilder.checkpointConfig(),
+                              configsBuilder.coordinatorConfig(),
+                              configsBuilder.leaseManagementConfig(),
+                              configsBuilder.lifecycleConfig(),
+                              configsBuilder.metricsConfig(),
+                              configsBuilder.processorConfig(),
+                              configsBuilder.retrievalConfig().retrievalSpecificConfig(new PollingConfig(streamName, kinesisClient)));
 
-        var leaseRefresher  = scheduler.leaseRefresher();
+    }
 
-        try {
-            leaseRefresher.deleteAll();
-        } catch (DependencyException e) {
-            e.printStackTrace();
-        } catch (software.amazon.kinesis.leases.exceptions.InvalidStateException e) {
-            e.printStackTrace();
-        } catch (ProvisionedThroughputException e) {
-            e.printStackTrace();
-        }
+    private void run() throws DependencyException, ProvisionedThroughputException, software.amazon.kinesis.leases.exceptions.InvalidStateException {
+
+
+        var leaseRefresher  = this.scheduler.leaseRefresher();
+
+        describeLeases(leaseRefresher);
+        leaseRefresher.deleteAll();
 
         /**
          * Kickoff the Scheduler. Record processing of the stream of dummy data will continue indefinitely
          * until an exit is triggered.
          */
-        Thread schedulerThread = new Thread(scheduler);
+        Thread schedulerThread = new Thread(this.scheduler);
         schedulerThread.setDaemon(true);
         schedulerThread.start();
 
@@ -166,7 +192,7 @@ public class Consumer {
          * Stops consuming data. Finishes processing the current batch of data already received from Kinesis
          * before shutting down.
          */
-        Future<Boolean> gracefulShutdownFuture = scheduler.startGracefulShutdown();
+        Future<Boolean> gracefulShutdownFuture = this.scheduler.startGracefulShutdown();
         log.info("Waiting up to 20 seconds for shutdown to complete.");
         try {
             gracefulShutdownFuture.get(20, TimeUnit.SECONDS);
@@ -214,13 +240,15 @@ public class Consumer {
             }
         }
 
-        public String readRecordData (KinesisClientRecord record) {
+        public String decodeUtf8 (KinesisClientRecord record) {
 
-            ByteBuffer data = record.data();
-            final byte[] bytes = new byte[data.remaining()];
-            data.duplicate().get(bytes);
-
-            return new String(bytes);
+            try {
+                return StandardCharsets.UTF_8.newDecoder()
+                                             .decode(record.data())
+                                             .toString();
+            } catch (CharacterCodingException e) {
+                throw new RuntimeException("could not decode the event data", e);
+            }
         }
 
         /**
@@ -235,10 +263,15 @@ public class Consumer {
             try {
                 log.info("Processing {} record(s)", processRecordsInput.records().size());
                 processRecordsInput.records().forEach(
-                        r -> log.info("\n\nProcessing record pk: {} -- Seq: {}, --data {}",
-                                r.partitionKey(),
-                                r.sequenceNumber(),
-                                readRecordData(r)));
+                        r -> {
+                            log.info("\n\nProcessing record pk: {} -- Seq: {}, --data {}",
+                                    r.partitionKey(),
+                                    r.sequenceNumber(),
+                                    decodeUtf8(r));
+                        });
+
+                processRecordsInput.checkpointer(); // <<<<<<<<<<<
+
             } catch (Throwable t) {
                 log.error("Caught throwable while processing records. Aborting.");
                 Runtime.getRuntime().halt(1);
