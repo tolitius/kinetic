@@ -5,6 +5,3 @@
   (let [executor (Executors/newSingleThreadExecutor)]
     (.submit executor fun)
     executor))
-
-(defn shutdown-executor [executor]
-  (.shutdown executor))

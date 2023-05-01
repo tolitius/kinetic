@@ -22,7 +22,7 @@
                       InitialPositionInStreamExtended/newInitialPosition)
 
     ;; (!) for the below to have an effect, delete the existing lease
-    :time-horizon (-> InitialPositionInStream/TRIM_HORIZON
+    :trim-horizon (-> InitialPositionInStream/TRIM_HORIZON
                       InitialPositionInStreamExtended/newInitialPosition)
     :at-timestamp (InitialPositionInStreamExtended/newInitialPositionAtTimestamp timestamp)
 
@@ -46,17 +46,17 @@
            kinesis-client
            dynamo-client
            cloud-watch-client
-           record-processor]}]
+           record-processor-factory] :as opts}]
 
 
                    ;; TODO: add multistream if/when needed
-  {:config-builder (ConfigsBuilder. (single-stream-tracker stream-name start-from)
+  {:config-builder (ConfigsBuilder. (single-stream-tracker opts)
                                     application-name
                                     kinesis-client
                                     dynamo-client
                                     cloud-watch-client
-                                    (UUID/randomUUID)
-                                    record-processor)
+                                    (-> (UUID/randomUUID) str)
+                                    record-processor-factory)
    :polling-config (PollingConfig. stream-name kinesis-client)})
 
 (defn make-scheduler [{:keys [config-builder
@@ -73,16 +73,17 @@
                   .retrievalConfig
                   (.retrievalSpecificConfig polling-config))))
 
-(defn record-checkpoint []
+(defn record-checkpoint [checkpointer]
   )
 
 (defn make-utf8-decoder []
   (let [decoder (-> (StandardCharsets/UTF_8)
                     .newDecoder)]
-    (fn [{:keys [data]}]
-      (-> data
-          (.decode decoder)
-          .toString))))
+    (fn [record]
+      (->> record
+           .data
+           (.decode decoder)
+           .toString))))
 
 (defn shard-record-processor [consume
                               checkpoint-every-ms]
@@ -103,15 +104,15 @@
                      sequence-number)))
 
       (processRecords
-        [this records]
+        [this batch]
         "process data records.
          the Amazon Kinesis Client Library will invoke this method to deliver data records to the application.
          upon fail over, the new instance will get records with sequence number > checkpoint position for each partition key.
 
          args: 'records' provides the records to be processed as well as information and capabilities related to them (eg checkpointing)."
-        (consume records)
+        (consume (.records batch))
         ;; TODO: (when checkpoint-every-ms ...)
-        (record-checkpoint (.checkpointer records)))
+        (record-checkpoint (.checkpointer batch)))
 
       (leaseLost
         [this lost-lease]
@@ -132,7 +133,8 @@
          args: 'completed-shard' provides access to a checkpointer method for completing processing of the shard."
         (log/infof "%s shard is completed. recording a checkpoint.."
                    @shard-id)
-        (-> completed-shard .checkpointer .checkpoint))
+        ;; (-> completed-shard .checkpointer .checkpoint)
+        )
 
       (shutdownRequested
         [this shutdown-request]
@@ -146,11 +148,66 @@
 
         (log/infof "scheduler for the shard %s is shutting down. recording a checkpoint.."
                    @shard-id)
-        (-> shutdown-request .checkpointer .checkpoint)))))
+        ;; (-> shutdown-request .checkpointer .checkpoint)
+        ))))
 
+(defn shard-record-processor-factory [consume
+                                      checkpoint-every-ms]
+  (reify ShardRecordProcessorFactory
+    (shardRecordProcessor [this]
+      (shard-record-processor consume checkpoint-every-ms))))
 
-(defn start-consumer []
-  )
+(defn validate-consumer-args [{:keys [stream-name
+                                      application-name
+                                      consume] :as args}]
+  (when-not (or stream-name
+                application-name
+                consume)
+    (throw (RuntimeException.
+             (str "kinesis consumer needs at least these 3 pieces to start: stream name, application name and a consume function. "
+                  args))))
+  (when-not (fn? consume)
+    (throw (RuntimeException.
+             (str "'consume' needs to be a _function_ that is capable of taking a batch of kinesis records: "
+                  args)))))
 
-(defn stop-consumer []
-  )
+(defn echo
+  "echo consume function.
+   expects records to be UTF-8 decoded"
+  [records]
+  (let [decode (make-utf8-decoder)]
+    (doseq [record records]
+      (log/infof "got a record: %s, data: %s\n"
+                 record
+                 (decode record)))))
+
+(defn show-leases [consumer]
+  (-> consumer :scheduler .leaseRefresher .listLeases))
+
+(defn delete-all-leases [consumer]
+  (-> consumer :scheduler .leaseRefresher .deleteAll))
+
+(defn start-consumer [{:keys [stream-name
+                              start-from
+                              application-name
+                              region
+                              consume
+                              checkpoint-every-ms
+                              config]             ;; TODO: use this placeholder to exand on the ConfigsBuilder defaults
+                       :as opts}]
+  (validate-consumer-args opts)
+  (let [config-args (merge opts
+                           {:kinesis-client (aws/make-kinesis-client region)
+                            :dynamo-client (aws/make-dynamo-db-client region)
+                            :cloud-watch-client (aws/make-cloud-watch-client region)
+                            :record-processor-factory (shard-record-processor-factory consume
+                                                                                      checkpoint-every-ms)})
+        scheduler (-> (make-config config-args)
+                      make-scheduler)]
+    {:scheduler scheduler
+     :executor (t/start-within-thread scheduler)}))
+
+(defn stop-consumer [{:keys [scheduler
+                             executor]}]
+  (.startGracefulShutdown scheduler)
+  (.shutdown executor))
