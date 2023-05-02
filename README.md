@@ -1,6 +1,6 @@
 # kinetic
 
-an aws kinesis client based on [amazon 2.x api](https://github.com/awslabs/amazon-kinesis-client)
+aws kinesis client based on [amazon 2.x api](https://github.com/awslabs/amazon-kinesis-client)
 
 [![<! release](https://img.shields.io/badge/dynamic/json.svg?label=release&url=https%3A%2F%2Fclojars.org%2Ftolitius%2Fkinetic%2Flatest-version.json&query=version&colorB=blue)](https://github.com/tolitius/kinetic/releases)
 [![<! clojars>](https://img.shields.io/clojars/v/tolitius/kinetic.svg)](https://clojars.org/tolitius/kinetic)
@@ -23,16 +23,17 @@ $ make repl
                         :consume k/echo}))
 ```
 
-[k/echo](https://github.com/tolitius/kinetic/blob/2cdde9a3ca55ec3f2b6a2a4aaa1b6924f454d7f8/src/kinetic/consumer.clj#L190-L198)
-is a sample function that decodes (UTF-8) and echos all the records it consumes from a kinesis stream
+[echo](https://github.com/tolitius/kinetic/blob/2cdde9a3ca55ec3f2b6a2a4aaa1b6924f454d7f8/src/kinetic/consumer.clj#L190-L198) :point_up_2:
+here is a sample function that decodes (UTF-8) and echos all the records it consumes from a kinesis stream
 
-for the real work you would provide your own function as a value of the "`:consume`" key that takes a batch of kinesis records in [this format](https://github.com/tolitius/kinetic/blob/2cdde9a3ca55ec3f2b6a2a4aaa1b6924f454d7f8/src/kinetic/consumer.clj#L85-L94).
+in order to do something more useful provide a function as a value of the "`:consume`" key<br/>
+that takes a batch of kinesis records in [this format](https://github.com/tolitius/kinetic/blob/2cdde9a3ca55ec3f2b6a2a4aaa1b6924f454d7f8/src/kinetic/consumer.clj#L85-L94).
 
 ### initial position
 
-by default kinesis consumer will start from the recorded "checkpoint" that is stored in something that is called a "lease".
+by default a kinesis consumer will start consuming records from a previously recorded "`checkpoint`" that is stored in something that is called a "`lease`".
 
-in order to start from a custom place in a stream, you can use a `:start-from` key:
+in order to start consuming from a custom place in a stream use a `:start-from` key:
 
 ```clojure
 => (def consumer
@@ -52,7 +53,7 @@ possible values are (as [per amazon's api](https://github.com/awslabs/amazon-kin
 
 * `{:position :trim-horizon}`: start at the earliest sequence number available for your application
 * `{:position :latest}`: start at the latest sequence number available on the stream
-* `{:position :at-timestamp :timestamp <date>}`: start at a certain timestamp. the timestamp value is java.util.Date
+* `{:position :at-timestamp :timestamp <date>}`: start at a certain timestamp. the timestamp value is `java.util.Date`
 
 for example:
 
@@ -87,21 +88,21 @@ and the records will start arriving from yesterday until the latest one on the s
 => (k/show-leases consumer)
 
 ;; [#object[software.amazon.kinesis.leases.Lease 0x764d54a0
-   "Lease(leaseKey=shardId-000000000000,
-          leaseOwner=d498fa4c-12b5-45b3-a82f-9025e396f952,
-          leaseCounter=124,
-          concurrencyToken=null,
-          lastCounterIncrementNanos=null,
-          checkpoint={SequenceNumber: 50638743107472231712790482650536060104711379819100635138,
-                      SubsequenceNumber: 0},
-          pendingCheckpoint=null,
-          pendingCheckpointState=null,
-          isMarkedForLeaseSteal=false,
-          ownerSwitchesSinceCheckpoint=0,
-          parentShardIds=[],
-          childShardIds=[],
-          hashKeyRangeForLease=HashKeyRangeForLease(startingHashKey=0,
-                                                    endingHashKey=340282366920938463463374607431768211455))"]]
+;; "Lease(leaseKey=shardId-000000000000,
+;;        leaseOwner=d498fa4c-12b5-45b3-a82f-9025e396f952,
+;;        leaseCounter=124,
+;;        concurrencyToken=null,
+;;        lastCounterIncrementNanos=null,
+;;        checkpoint={SequenceNumber: 50638743107472231712790482650536060104711379819100635138,
+;;                    SubsequenceNumber: 0},
+;;        pendingCheckpoint=null,
+;;        pendingCheckpointState=null,
+;;        isMarkedForLeaseSteal=false,
+;;        ownerSwitchesSinceCheckpoint=0,
+;;        parentShardIds=[],
+;;        childShardIds=[],
+;;        hashKeyRangeForLease=HashKeyRangeForLease(startingHashKey=0,
+;;                                                  endingHashKey=340282366920938463463374607431768211455))"]]
 ```
 
 ### stopping consumer
