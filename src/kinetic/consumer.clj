@@ -74,14 +74,30 @@
                   (.retrievalSpecificConfig polling-config))))
 
 (defn record-checkpoint [checkpointer]
-  )
+  ;; these @Getter annotations: https://github.com/awslabs/amazon-kinesis-client/blob/0c5042dadf794fe988438436252a5a8fe70b6b0b/amazon-kinesis-client/src/main/java/software/amazon/kinesis/checkpoint/ShardRecordProcessorCheckpointer.java#L50-L53
+  ;; don't seem to apply, so .. private-field
+  (let [last-sequence (t/private-field checkpointer "lastCheckpointValue")
+        current-sequence (t/private-field checkpointer "largestPermittedCheckpointValue")]
+    (log/infof "recording a checkpoint at sequence: %s (last recorded sequence was %s)"
+               current-sequence last-sequence)
+    (.checkpoint checkpointer)))
+
+(defn ->record [^KinesisClientRecord record]
+  {:sequence-number                (.sequenceNumber record)
+   :approximate-arrival-timestamp  (.approximateArrivalTimestamp record)
+   :data                           (.data record)
+   :partitionKey                   (.partitionKey record)
+   :encryption-type                (.encryptionType record)
+   :sub-sequence-number            (.subSequenceNumber record)
+   :explicit-hash-key              (.explicitHashKey record)
+   :aggregated                     (.aggregated record)
+   :schema                         (.schema record)})
 
 (defn make-utf8-decoder []
   (let [decoder (-> (StandardCharsets/UTF_8)
                     .newDecoder)]
-    (fn [record]
-      (->> record
-           .data
+    (fn [{:keys [data]}]
+      (->> data
            (.decode decoder)
            .toString))))
 
@@ -110,7 +126,7 @@
          upon fail over, the new instance will get records with sequence number > checkpoint position for each partition key.
 
          args: 'records' provides the records to be processed as well as information and capabilities related to them (eg checkpointing)."
-        (consume (.records batch))
+        (consume (->> batch .records (mapv ->record)))
         ;; TODO: (when checkpoint-every-ms ...)
         (record-checkpoint (.checkpointer batch)))
 
@@ -184,16 +200,32 @@
 (defn show-leases [consumer]
   (-> consumer :scheduler .leaseRefresher .listLeases))
 
-(defn delete-all-leases [consumer]
-  (-> consumer :scheduler .leaseRefresher .deleteAll))
+(defn delete-all-leases [{:keys [scheduler]}]
+  (log/infof "deleting leases for \"%s\" application"
+             (.applicationName scheduler))
+  (-> scheduler .leaseRefresher .deleteAll))
+
+(defn prep-initial-position
+  "if there is an existing lease, by default, kinesis client will ignore an initial position that is provided.
+   this deletes existing leases for this app (a.k.a. consumer group) in case there is a position provided"
+  [scheduler
+   start-from
+   delete-leases?]
+  (when-let [{:keys [position]} start-from]
+    (when delete-leases?
+      (log/infof "need to delete leases for the requested initial position \"%s\" to take effect"
+                 start-from)
+      (delete-all-leases {:scheduler scheduler}))))
 
 (defn start-consumer [{:keys [stream-name
-                              start-from
                               application-name
                               region
                               consume
+                              start-from
+                              delete-leases?
                               checkpoint-every-ms
                               config]             ;; TODO: use this placeholder to exand on the ConfigsBuilder defaults
+                       :or {delete-leases? true}
                        :as opts}]
   (validate-consumer-args opts)
   (let [config-args (merge opts
@@ -204,10 +236,14 @@
                                                                                       checkpoint-every-ms)})
         scheduler (-> (make-config config-args)
                       make-scheduler)]
+    (prep-initial-position scheduler
+                           start-from
+                           delete-leases?)
     {:scheduler scheduler
      :executor (t/start-within-thread scheduler)}))
 
 (defn stop-consumer [{:keys [scheduler
                              executor]}]
+  ;; NOTE: current expected :( error on graceful shutdown: https://github.com/awslabs/amazon-kinesis-client/issues/914
   (.startGracefulShutdown scheduler)
   (.shutdown executor))

@@ -1,7 +1,7 @@
 package com.tolitius;
 
 /**
- * building on the aws official example:
+ * learning from and building up on the aws official example:
  *          https://docs.aws.amazon.com/streams/latest/dev/kcl2-standard-consumer-java-example.html
  */
 
