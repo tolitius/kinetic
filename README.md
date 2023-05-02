@@ -108,7 +108,7 @@ and the records will start arriving from yesterday until the latest one on the s
 ### stopping consumer
 
 ```clojure
-=> (k/stop-consumer c))
+=> (k/stop-consumer consumer))
 ```
 
 ## license
