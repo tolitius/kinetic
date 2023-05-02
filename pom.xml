@@ -2,15 +2,44 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <packaging>jar</packaging>
-  <groupId>kinetic</groupId>
+  <groupId>com.tolitius</groupId>
   <artifactId>kinetic</artifactId>
   <version>0.1.0</version>
   <name>kinetic</name>
+  <description>aws kinesis client</description>
+  <url>https://github.com/tolitius/kinetic</url>
+  <licenses>
+    <license>
+      <name>Eclipse Public License</name>
+      <url>http://www.eclipse.org/legal/epl-v10.html</url>
+    </license>
+  </licenses>
+  <developers>
+    <developer>
+      <name>tolitius</name>
+    </developer>
+  </developers>
+  <scm>
+    <url>https://github.com/tolitius/kinetic</url>
+    <connection>scm:git:git://github.com/tolitius/kinetic.git</connection>
+    <developerConnection>scm:git:ssh://git@github.com/tolitius/kinetic.git</developerConnection>
+    <tag>HEAD</tag>
+  </scm>
   <dependencies>
     <dependency>
       <groupId>org.clojure</groupId>
       <artifactId>clojure</artifactId>
-      <version>1.10.3</version>
+      <version>1.11.1</version>
+    </dependency>
+    <dependency>
+      <groupId>org.clojure</groupId>
+      <artifactId>tools.logging</artifactId>
+      <version>1.2.4</version>
+    </dependency>
+    <dependency>
+      <groupId>software.amazon.kinesis</groupId>
+      <artifactId>amazon-kinesis-client</artifactId>
+      <version>2.4.8</version>
     </dependency>
   </dependencies>
   <build>

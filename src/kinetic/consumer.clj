@@ -74,10 +74,8 @@
                   (.retrievalSpecificConfig polling-config))))
 
 (defn record-checkpoint [checkpointer]
-  ;; these @Getter annotations: https://github.com/awslabs/amazon-kinesis-client/blob/0c5042dadf794fe988438436252a5a8fe70b6b0b/amazon-kinesis-client/src/main/java/software/amazon/kinesis/checkpoint/ShardRecordProcessorCheckpointer.java#L50-L53
-  ;; don't seem to apply, so .. private-field
-  (let [last-sequence (t/private-field checkpointer "lastCheckpointValue")
-        current-sequence (t/private-field checkpointer "largestPermittedCheckpointValue")]
+  (let [last-sequence (.lastCheckpointValue checkpointer)
+        current-sequence (.largestPermittedCheckpointValue checkpointer)]
     (log/infof "recording a checkpoint at sequence: %s (last recorded sequence was %s)"
                current-sequence last-sequence)
     (.checkpoint checkpointer)))
@@ -244,6 +242,7 @@
 
 (defn stop-consumer [{:keys [scheduler
                              executor]}]
-  ;; NOTE: current expected :( error on graceful shutdown: https://github.com/awslabs/amazon-kinesis-client/issues/914
-  (.startGracefulShutdown scheduler)
+  ;; NOTE: current "expected" :( error on graceful shutdown: https://github.com/awslabs/amazon-kinesis-client/issues/914
+  ;; (.startGracefulShutdown scheduler)
+  (.shutdown scheduler)
   (.shutdown executor))
