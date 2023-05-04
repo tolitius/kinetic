@@ -244,5 +244,13 @@
                              executor]}]
   ;; NOTE: current "expected" :( error on graceful shutdown: https://github.com/awslabs/amazon-kinesis-client/issues/914
   ;; (.startGracefulShutdown scheduler)
-  (.shutdown scheduler)
-  (.shutdown executor))
+  (try (.shutdown scheduler)
+       (catch Exception e
+         (log/warn "could not cleanly shutdown the scheduler for"
+                   (.applicationName scheduler)
+                   "application due to" e)))
+  (try (.shutdown executor)
+       (catch Exception e
+         (log/warn "could not cleanly shutdown the executor for"
+                   (.applicationName scheduler)
+                   "application due to" e))))
