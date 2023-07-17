@@ -4,7 +4,7 @@
   <packaging>jar</packaging>
   <groupId>com.tolitius</groupId>
   <artifactId>kinetic</artifactId>
-  <version>0.1.1</version>
+  <version>0.1.2</version>
   <name>kinetic</name>
   <description>aws kinesis client</description>
   <url>https://github.com/tolitius/kinetic</url>

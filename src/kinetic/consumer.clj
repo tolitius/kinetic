@@ -210,8 +210,12 @@
    start-from
    delete-leases?]
   (when-let [{:keys [position]} start-from]
-    (when delete-leases?
-      (log/infof "need to delete leases for the requested initial position \"%s\" to take effect"
+    (when (or delete-leases?
+              ;; in order for :trim-horizon and :at-timestamp initial position to take effect
+              ;; leases need to be deleted
+              (#{:trim-horizon
+                 :at-timestamp} position))
+      (log/infof "about to delete leases, initial position \"%s\""
                  start-from)
       (delete-all-leases {:scheduler scheduler}))))
 
@@ -223,7 +227,7 @@
                               delete-leases?
                               checkpoint-every-ms
                               config]             ;; TODO: use this placeholder to exand on the ConfigsBuilder defaults
-                       :or {delete-leases? true}
+                       :or {delete-leases? false}
                        :as opts}]
   (validate-consumer-args opts)
   (let [config-args (merge opts
