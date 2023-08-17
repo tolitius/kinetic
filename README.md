@@ -111,6 +111,19 @@ and the records will start arriving from yesterday until the latest one on the s
 => (k/stop-consumer consumer))
 ```
 
+### credentials
+
+AWS credentials will be either picked up via the [regular AWS means](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html) or can be explicitely provided to kinetic consumer:
+
+```clojure
+(start-consumer {:stream-name "lagoon-nebula"
+                 :application-name "hubble"
+                 :start-from {:position :trim-horizon}
+                 :creds {:access-key-id     "AK..ZZ"          ;; <= via a "creds" map
+                         :secret-access-key "z0.........0m"}
+                 :consume echo})
+```
+
 ## license
 
 Copyright © 2023 tolitius

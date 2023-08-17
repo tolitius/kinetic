@@ -221,6 +221,7 @@
 
 (defn start-consumer [{:keys [stream-name
                               application-name
+                              creds               ;; in a form of {:access-key-id "foo" :secret-access-key "bar"}
                               region
                               consume
                               start-from
@@ -231,9 +232,9 @@
                        :as opts}]
   (validate-consumer-args opts)
   (let [config-args (merge opts
-                           {:kinesis-client (aws/make-kinesis-client region)
-                            :dynamo-client (aws/make-dynamo-db-client region)
-                            :cloud-watch-client (aws/make-cloud-watch-client region)
+                           {:kinesis-client (aws/make-kinesis-client opts)
+                            :dynamo-client (aws/make-dynamo-db-client opts)
+                            :cloud-watch-client (aws/make-cloud-watch-client opts)
                             :record-processor-factory (shard-record-processor-factory consume
                                                                                       checkpoint-every-ms)})
         scheduler (-> (make-config config-args)
