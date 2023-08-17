@@ -113,7 +113,8 @@ and the records will start arriving from yesterday until the latest one on the s
 
 ### credentials
 
-AWS credentials will be either picked up via the [regular AWS means](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html) or can be explicitely provided to kinetic consumer:
+AWS credentials will be either picked up via the [regular AWS means](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html)<br/>
+or can be explicitly provided to kinetic consumer:
 
 ```clojure
 (start-consumer {:stream-name "lagoon-nebula"
