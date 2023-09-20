@@ -20,13 +20,13 @@
 
 (defn make-region
   ([]
-   (make-region {}))
-  ([{:keys [region]
-     :or {region "us-east-1"}}]
-   (Region/of region)))
+   (make-region "us-east-1"))
+  ([region]
+   (Region/of (or region "us-east-1"))))
 
 (defn make-dynamo-db-client [{:keys [region
                                      creds]}]
+
   (cond-> (DynamoDbAsyncClient/builder)
     :region  (.region (make-region region)) ;; region should be there
     creds    (.credentialsProvider (make-creds-provider creds))
