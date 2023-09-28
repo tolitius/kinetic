@@ -1,63 +1,50 @@
 (ns kinetic.consumer
   (:require [clojure.tools.logging :as log]
             [kinetic.tools :as t]
+            [kinetic.tracker :as tracker]
             [kinetic.aws :as aws])
   (:import [java.util UUID]
+           [java.time Duration]
            [java.nio.charset StandardCharsets]
            [software.amazon.kinesis.common ConfigsBuilder
                                            InitialPositionInStream
                                            InitialPositionInStreamExtended
-                                           StreamIdentifier]
+                                           StreamIdentifier
+                                           StreamConfig]
            [software.amazon.kinesis.coordinator Scheduler]
            [software.amazon.kinesis.processor ShardRecordProcessor
                                               ShardRecordProcessorFactory
+                                              FormerStreamsLeasesDeletionStrategy
+                                              FormerStreamsLeasesDeletionStrategy$AutoDetectionAndDeferredDeletionStrategy
+                                              StreamTracker
                                               SingleStreamTracker]
            [software.amazon.kinesis.retrieval KinesisClientRecord
                                               polling.PollingConfig]))
 
-(defn make-initial-position [{:keys [position
-                                     timestamp] :as at}]
-  (case position
-    :latest       (-> InitialPositionInStream/LATEST
-                      InitialPositionInStreamExtended/newInitialPosition)
-
-    ;; (!) for the below to have an effect, delete the existing lease
-    :trim-horizon (-> InitialPositionInStream/TRIM_HORIZON
-                      InitialPositionInStreamExtended/newInitialPosition)
-    :at-timestamp (InitialPositionInStreamExtended/newInitialPositionAtTimestamp timestamp)
-
-    ;; TODO: tap into the software.amazon.kinesis.retrieval.IteratorBuilder
-    ; :at_sequence_number
-    ; :after_sequence_number
-    (throw (RuntimeException. (str "initial position is not supported: " at)))))
-
-(defn single-stream-tracker [{:keys [stream-name
-                                     start-from]}]
-  (let [stream-identifier (StreamIdentifier/singleStreamInstance stream-name)]
-    (if-not start-from
-      (SingleStreamTracker. stream-identifier)
-      (SingleStreamTracker. stream-identifier
-                            (make-initial-position start-from)))))
-
 (defn make-config
-  [{:keys [stream-name
-           start-from
+  [{:keys [streams
+           multi-stream?        ;; in case we need a multi stream tracking
+           aws-account-number
            application-name
            kinesis-client
            dynamo-client
            cloud-watch-client
            record-processor-factory] :as opts}]
 
-
-                   ;; TODO: add multistream if/when needed
-  {:config-builder (ConfigsBuilder. (single-stream-tracker opts)
-                                    application-name
-                                    kinesis-client
-                                    dynamo-client
-                                    cloud-watch-client
-                                    (-> (UUID/randomUUID) str)
-                                    record-processor-factory)
-   :polling-config (PollingConfig. stream-name kinesis-client)})
+  (let [multi? (or multi-stream?
+                   (> (count streams)
+                      1))]
+    {:config-builder (ConfigsBuilder. (tracker/make-stream-tracker opts)
+                                      application-name
+                                      kinesis-client
+                                      dynamo-client
+                                      cloud-watch-client
+                                      (-> (UUID/randomUUID) str)
+                                      record-processor-factory)
+     :polling-config (if multi?
+                       (PollingConfig. kinesis-client)
+                       (PollingConfig. (-> streams first :name)
+                                       kinesis-client))}))
 
 (defn make-scheduler [{:keys [config-builder
                               polling-config]}]
