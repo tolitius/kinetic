@@ -114,18 +114,18 @@ and the records will start arriving from yesterday until the latest one on the s
 
 ### multiple streams
 
-for a single consumer to consume from multiple streams:
+an example of a single consumer that consumes from multiple streams:
 
 ```clojure
 => (def consumer
      (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
-                                   :start-from {:position :trim-horizon}}
-                                  {:name "milky-way:solar:mars"}]
+                                   :start-from {:position :trim-horizon}}   ;; <= ":start-from" is optional
+                                  {:name "milky-way.solar.mars"}]
                         :application-name "hubble"
                         :consume k/echo}))
 ```
 
-for multiple consumers to consume from one or more streams with the same application name:
+for a consumer to consume a single stream, but _track_ it in a multi stream mode:
 
 ```clojure
 => (def consumer
@@ -136,19 +136,19 @@ for multiple consumers to consume from one or more streams with the same applica
                         :consume k/echo}))
 ```
 
-"`multi-stream?`" is not needed in the first example since there are more than one stream in the config<br/>
-in the second example it means that even though it is a single stream, track it as "multi".
+"`multi-stream?`" is only needed in case a single stream is provided _and_ it needs to be tracked as a multi stream in case other consumers, apps, instances use the same application name.
 
-what both really mean is a different way leases are tracked.
+kinesis stream leases are _tracked_ differently between a non multi and multi stream modes.
 
-in a case with a single stream (the default) leases are tracked _with no stream intel_ in the lease key:
+in a case of a single stream (the default) mode leases are tracked _with no stream intel_ in the "lease key":
 
 ```java
-[#object[software.amazon.kinesis.leases.Lease 0x53630682 "Lease(leaseKey=shardId-000000000000",
-                                                          checkpoint={SequenceNumber: 4964...3442, SubsequenceNumber: 0}]]
+[[software.amazon.kinesis.leases.Lease
+                                 Lease(leaseKey=shardId-000000000000, ... )
+                                 checkpoint={SequenceNumber: 4964...3442, SubsequenceNumber: 0}]]
 ```
 
-in the case of multi stream, when either:
+in the case of a multi stream mode, when either:
 * more than one stream is provided in the config<br/>
 OR
 * the explicit "`multi-stream?`" is set in the config
@@ -156,14 +156,16 @@ OR
 leases include stream intel in trackers, and use a different underlying object ([MultiStreamLease](https://github.com/awslabs/amazon-kinesis-client/blob/master/amazon-kinesis-client/src/main/java/software/amazon/kinesis/leases/MultiStreamLease.java)) to store and parse / read leases:
 
 ```java
-[#object[software.amazon.kinesis.leases.MultiStreamLease 0x1df83569 "Lease(leaseKey=123243:milky-way.solar.pluto:1:shardId-000000000000",
-                                                          checkpoint={SequenceNumber: 4923...3941, SubsequenceNumber: 0}]
- #object[software.amazon.kinesis.leases.MultiStreamLease 0x253c7189 "Lease(leaseKey=123243:milky-way.solar.mars:1:shardId-000000000000",
-                                                          checkpoint={SequenceNumber: 4923...3941, SubsequenceNumber: 0}]]
+[[software.amazon.kinesis.leases.MultiStreamLease
+                                 Lease(leaseKey=123243:milky-way.solar.pluto:1:shardId-000000000000, ... )
+                                 checkpoint={SequenceNumber: 4923...3941, SubsequenceNumber: 0}]
+[software.amazon.kinesis.leases.MultiStreamLease
+                                 Lease(leaseKey=123243:milky-way.solar.mars:1:shardId-000000000000, ... )
+                                 checkpoint={SequenceNumber: 4826...3870, SubsequenceNumber: 0}]]
 
 ```
 
-these 👆 are entries in a single lease dynambodb table that is named after the "`:application-name`" config param.
+these 👆 are entries / records kinesis client stores and reads to/from a single dynambodb lease table that is named after the "`:application-name`" config param.
 
 one thing to keep in mind: 👉 multi stream entries **cannot** coexist with a single stream (no stream intel) entries
 because internally AWS client uses _one_ type of a lease object to parse them.
