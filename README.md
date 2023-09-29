@@ -5,7 +5,13 @@ aws kinesis client based on [amazon 2.x api](https://github.com/awslabs/amazon-k
 [![<! release](https://img.shields.io/badge/dynamic/json.svg?label=release&url=https%3A%2F%2Fclojars.org%2Fcom.tolitius%2Fkinetic%2Flatest-version.json&query=version&colorB=blue)](https://github.com/tolitius/kinetic/releases)
 [![<! clojars>](https://img.shields.io/clojars/v/com.tolitius/kinetic.svg)](https://clojars.org/com.tolitius/kinetic)
 
-... and some love
+- [consumer](#consumer)
+  - [initial position](#initial-position)
+  - [leases](#leases)
+  - [stopping consumer](#stopping-consumer)
+  - [multiple streams](#multiple-streams)
+  - [credentials](#credentials)
+- [license](#license)
 
 ```clojure
 $ make repl
