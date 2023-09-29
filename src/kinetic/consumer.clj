@@ -12,6 +12,7 @@
                                            StreamIdentifier
                                            StreamConfig]
            [software.amazon.kinesis.coordinator Scheduler]
+           [software.amazon.kinesis.leases Lease]
            [software.amazon.kinesis.processor ShardRecordProcessor
                                               ShardRecordProcessorFactory
                                               FormerStreamsLeasesDeletionStrategy
@@ -30,10 +31,8 @@
            dynamo-client
            cloud-watch-client
            record-processor-factory] :as opts}]
-
   (let [multi? (or multi-stream?
-                   (> (count streams)
-                      1))]
+                   (> (count streams) 1))]
     {:config-builder (ConfigsBuilder. (tracker/make-stream-tracker opts)
                                       application-name
                                       kinesis-client
@@ -185,7 +184,39 @@
 (defn show-leases [consumer]
   (-> consumer :scheduler .leaseRefresher .listLeases))
 
-(defn delete-all-leases [{:keys [scheduler]}]
+(defn make-lease [lease-key]
+  (doto
+    (Lease.)
+    (.leaseKey lease-key)))
+
+(defn find-leases-for-stream [scheduler
+                              stream]
+  (let [stream-identifier (if (tracker/multi-stream? scheduler)
+                            (tracker/multi-stream-identifier stream)
+                            (tracker/single-stream-identifier stream))]
+    (-> scheduler
+        .leaseRefresher
+        (.listLeasesForStream stream-identifier))))
+
+(defn delete-lease [scheduler
+                    lease]
+  (log/infof "deleting lease: %s for %s application"
+             (.leaseKey lease)
+             (.applicationName scheduler))
+  (-> scheduler
+      .leaseRefresher
+      (.deleteLease lease)))
+
+(defn delete-leases-for-stream [scheduler
+                                stream]
+  (log/infof "deleting leases for stream \"%s\", application \"%s\""
+             stream
+             (.applicationName scheduler))
+  (->> stream
+       (find-leases-for-stream scheduler)
+       (mapv (partial delete-lease scheduler))))
+
+(defn delete-all-leases [scheduler]
   (log/infof "deleting leases for \"%s\" application"
              (.applicationName scheduler))
   (-> scheduler .leaseRefresher .deleteAll))
@@ -194,28 +225,29 @@
   "if there is an existing lease, by default, kinesis client will ignore an initial position that is provided.
    this deletes existing leases for this app (a.k.a. consumer group) in case there is a position provided"
   [scheduler
-   start-from
-   delete-leases?]
+   aws-account-number
+   {:keys [start-from
+           delete-leases?] :as stream}]
   (when-let [{:keys [position]} start-from]
     (when (or delete-leases?
               ;; in order for :trim-horizon and :at-timestamp initial position to take effect
               ;; leases need to be deleted
               (#{:trim-horizon
                  :at-timestamp} position))
-      (log/infof "about to delete leases, initial position \"%s\""
-                 start-from)
-      (delete-all-leases {:scheduler scheduler}))))
+      (log/infof "about to delete a leases for %s"
+                 stream)
+      (delete-leases-for-stream scheduler
+                                (assoc stream :aws-account-number
+                                              aws-account-number)))))
 
-(defn start-consumer [{:keys [stream-name
-                              application-name
+(defn start-consumer [{:keys [application-name
+                              aws-account-number
+                              streams
                               creds               ;; in a form of {:access-key-id "foo" :secret-access-key "bar"}
                               region
                               consume
-                              start-from
-                              delete-leases?
                               checkpoint-every-ms
                               config]             ;; TODO: use this placeholder to exand on the ConfigsBuilder defaults
-                       :or {delete-leases? false}
                        :as opts}]
   (validate-consumer-args opts)
   (let [config-args (merge opts
@@ -226,9 +258,9 @@
                                                                                       checkpoint-every-ms)})
         scheduler (-> (make-config config-args)
                       make-scheduler)]
-    (prep-initial-position scheduler
-                           start-from
-                           delete-leases?)
+    (mapv (partial prep-initial-position scheduler
+                                         aws-account-number)
+          streams)
     {:scheduler scheduler
      :executor (t/start-within-thread scheduler)}))
 

@@ -16,13 +16,13 @@
 (defn make-initial-position [{:keys [position
                                      timestamp] :as at}]
   (case position
-    :latest       (-> InitialPositionInStream/LATEST
-                      InitialPositionInStreamExtended/newInitialPosition)
+    (nil | :latest)  (-> InitialPositionInStream/LATEST
+                         InitialPositionInStreamExtended/newInitialPosition)
 
     ;; (!) for the below to have an effect, delete the existing lease
-    :trim-horizon (-> InitialPositionInStream/TRIM_HORIZON
-                      InitialPositionInStreamExtended/newInitialPosition)
-    :at-timestamp (InitialPositionInStreamExtended/newInitialPositionAtTimestamp timestamp)
+    :trim-horizon    (-> InitialPositionInStream/TRIM_HORIZON
+                         InitialPositionInStreamExtended/newInitialPosition)
+    :at-timestamp    (InitialPositionInStreamExtended/newInitialPositionAtTimestamp timestamp)
 
     ;; TODO: tap into the software.amazon.kinesis.retrieval.IteratorBuilder
     ; :at_sequence_number
@@ -31,13 +31,16 @@
 
 ;; single stream tracker
 
+(defn single-stream-identifier [{:keys [name]}]
+  (StreamIdentifier/singleStreamInstance name))
+
 (defn single-stream-tracker [{:keys [name
-                                     start-from]}]
+                                     start-from] :as stream}]
 
   (log/infof "making a single stream tracker for %s stream"
              name)
 
-  (let [stream-identifier (StreamIdentifier/singleStreamInstance name)]
+  (let [stream-identifier (single-stream-identifier stream)]
     (if-not start-from
       (SingleStreamTracker. stream-identifier)
       (SingleStreamTracker. stream-identifier
@@ -51,8 +54,8 @@
 
   source: https://github.com/awslabs/amazon-kinesis-client/blob/7899820cb17eefb1eed4a4d0fbc3b86f2da9f2d3/amazon-kinesis-client/src/main/java/software/amazon/kinesis/common/StreamIdentifier.java#L48-L53
   "
-  [aws-account-number
-   {:keys [name
+  [{:keys [aws-account-number
+           name
            epoch]}]
   (str (or aws-account-number "0")
        ":"
@@ -60,11 +63,15 @@
        ":"
        (or epoch 1)))
 
+(defn multi-stream-identifier [stream]
+  (StreamIdentifier/multiStreamInstance
+    (make-stream-id stream)))
+
 (defn add-multi-stream-identifier [aws-account-number
-                             id]
+                                   id]
   (assoc id :identifier
-            (StreamIdentifier/multiStreamInstance (make-stream-id aws-account-number
-                                                                  id))))
+            (multi-stream-identifier (assoc id :aws-account-id
+                                               aws-account-number))))
 
 (defn make-stream-config [{:keys [identifier
                                   start-from] :as opts}]
@@ -77,9 +84,10 @@
    :streams [{:name        \"milky-way:solar:pluto\"
               :start-from  {:position :trim-horizon}
               :epoc        1}
-             {:name        \"milky-way:solar:mars\"
-              :start-from  {:position :trim-horizon}
-              :epoc        42}]}
+             {:name            \"milky-way:solar:mars\"
+              :start-from      {:position :trim-horizon}
+              :delete-leases?  true
+              :epoc            42}]}
   "
   [{:keys [aws-account-number
            streams]}]
@@ -110,3 +118,6 @@
         (single-stream-tracker (first streams))
         (multi-stream-tracker opts))
     (multi-stream-tracker opts)))
+
+(defn multi-stream? [scheduler]
+  (-> scheduler .streamTracker .isMultiStream))
