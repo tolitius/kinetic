@@ -76,7 +76,7 @@ for example:
 => (def consumer
      (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
                                    :start-from {:position :at-timestamp
-                                                          :timestamp yesterday}}]
+                                                :timestamp yesterday}}]
                         :application-name "hubble"
                         :consume k/echo}))
 ```
@@ -84,7 +84,9 @@ for example:
 you'll see a different starting sequence number in the logs:
 
 ```java
-[ShardRecordProcessor-0000] INFO  kinetic.consumer - initializing shard shardId-000000000000 at sequence {SequenceNumber: AT_TIMESTAMP,SubsequenceNumber: 0}
+[ShardRecordProcessor-0000] INFO
+  kinetic.consumer - initializing shard shardId-000000000000
+                     at sequence {SequenceNumber: AT_TIMESTAMP,SubsequenceNumber: 0}
 ```
 
 and the records will start arriving from yesterday until the latest one on the stream.
