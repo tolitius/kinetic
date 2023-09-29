@@ -18,11 +18,11 @@
 ;;     so the lease table need to be empty in case a switch from single to multi is needed
 
 (defn consumer []
-  (start-consumer {:streams [{:name "milky-way:solar:pluto"
+  (start-consumer {:streams [{:name "milky-way.solar.pluto"
                               :start-from {:position :trim-horizon}
                               ; :start-from {:position :latest}
                               }
-                             {:name "milky-way:solar:mars"
+                             {:name "milky-way.solar.mars"
                               ; :delete-leases? true
                               :start-from {:position :at-timestamp
                                            :timestamp yesterday}

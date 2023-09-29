@@ -81,10 +81,10 @@
 (defn multi-stream-tracker
   "
   {:aws-account-id 42
-   :streams [{:name        \"milky-way:solar:pluto\"
+   :streams [{:name        \"milky-way.solar.pluto\"
               :start-from  {:position :trim-horizon}
               :epoc        1}
-             {:name            \"milky-way:solar:mars\"
+             {:name            \"milky-way.solar.mars\"
               :start-from      {:position :trim-horizon}
               :delete-leases?  true
               :epoc            42}]}

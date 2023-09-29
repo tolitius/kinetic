@@ -18,7 +18,7 @@ $ make repl
 ```clojure
 
 => (def consumer
-     (k/start-consumer {:stream-name "lagoon-nebula"
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"}]
                         :application-name "hubble"
                         :consume k/echo}))
 ```
@@ -37,9 +37,9 @@ in order to start consuming from a custom place in a stream use a `:start-from` 
 
 ```clojure
 => (def consumer
-     (k/start-consumer {:stream-name "lagoon-nebula"
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
+                                   :start-from {:position :trim-horizon}}]
                         :application-name "hubble"
-                        :start-from {:position :trim-horizon}
                         :consume k/echo}))
 ```
 
@@ -68,9 +68,10 @@ for example:
          (Date/from)))
 
 => (def consumer
-     (k/start-consumer {:stream-name "lagoon-nebula"
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
+                                   :start-from {:position :at-timestamp
+                                                          :timestamp yesterday}}]
                         :application-name "hubble"
-                        :start-from {:position :at-timestamp :timestamp yesterday}
                         :consume k/echo}))
 ```
 
@@ -111,18 +112,75 @@ and the records will start arriving from yesterday until the latest one on the s
 => (k/stop-consumer consumer))
 ```
 
+### multiple streams
+
+for a single consumer to consume from multiple streams:
+
+```clojure
+=> (def consumer
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
+                                   :start-from {:position :trim-horizon}}
+                                  {:name "milky-way:solar:mars"}]
+                        :application-name "hubble"
+                        :consume k/echo}))
+```
+
+for multiple consumers to consume from one or more streams with the same application name:
+
+```clojure
+=> (def consumer
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
+                                   :start-from {:position :trim-horizon}}]
+                        :application-name "hubble"
+                        :multi-stream? true
+                        :consume k/echo}))
+```
+
+"`multi-stream?`" is not needed in the first example since there are more than one stream in the config<br/>
+in the second example it means that even though it is a single stream, track it as "multi".
+
+what both really mean is a different way leases are tracked.
+
+in a case with a single stream (the default) leases are tracked _with no stream intel_ in the lease key:
+
+```java
+[#object[software.amazon.kinesis.leases.Lease 0x53630682 "Lease(leaseKey=shardId-000000000000",
+                                                          checkpoint={SequenceNumber: 4964...3442, SubsequenceNumber: 0}]]
+```
+
+in the case of multi stream, when either:
+* more than one stream is provided in the config<br/>
+OR
+* the explicit "`multi-stream?`" is set in the config
+
+leases include stream intel in trackers, and use a different underlying object ([MultiStreamLease](https://github.com/awslabs/amazon-kinesis-client/blob/master/amazon-kinesis-client/src/main/java/software/amazon/kinesis/leases/MultiStreamLease.java)) to store and parse / read leases:
+
+```java
+[#object[software.amazon.kinesis.leases.MultiStreamLease 0x1df83569 "Lease(leaseKey=123243:milky-way.solar.pluto:1:shardId-000000000000",
+                                                          checkpoint={SequenceNumber: 4923...3941, SubsequenceNumber: 0}]
+ #object[software.amazon.kinesis.leases.MultiStreamLease 0x253c7189 "Lease(leaseKey=123243:milky-way.solar.mars:1:shardId-000000000000",
+                                                          checkpoint={SequenceNumber: 4923...3941, SubsequenceNumber: 0}]]
+
+```
+
+these 👆 are entries in a single lease dynambodb table that is named after the "`:application-name`" config param.
+
+one thing to keep in mind: 👉 multi stream entries **cannot** coexist with a single stream (no stream intel) entries
+because internally AWS client uses _one_ type of a lease object to parse them.
+
 ### credentials
 
 AWS credentials will be either picked up via the [regular AWS means](https://docs.aws.amazon.com/sdk-for-java/latest/developer-guide/credentials-chain.html)<br/>
 or can be explicitly provided to kinetic consumer:
 
 ```clojure
-(start-consumer {:stream-name "lagoon-nebula"
-                 :application-name "hubble"
-                 :start-from {:position :trim-horizon}
-                 :creds {:access-key-id     "AK..ZZ"          ;; <= via a "creds" map
-                         :secret-access-key "z0.........0m"}
-                 :consume echo})
+=> (def consumer
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"
+                                   :start-from {:position :trim-horizon}}]
+                        :application-name "hubble"
+                        :creds {:access-key-id     "AK..ZZ"          ;; <= via a "creds" map
+                                :secret-access-key "z0.........0m"}
+                        :consume k/echo}))
 ```
 
 ## license
