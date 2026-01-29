@@ -131,10 +131,13 @@
          otherwise an exception will be thrown and the all child shards of this shard will not make progress.
 
          args: 'completed-shard' provides access to a checkpointer method for completing processing of the shard."
-        (log/infof "%s shard is completed. recording a checkpoint.."
-                   @shard-id)
-        ;; (-> completed-shard .checkpointer .checkpoint)
-        )
+
+        (log/infof "%s shard is completed. recording a checkpoint.." @shard-id)
+        (try
+          (-> completed-shard .checkpointer .checkpoint)
+          (catch Exception e
+            (log/errorf e "failed to checkpoint at shard end for %s" @shard-id)
+            (throw e))))
 
       (shutdownRequested
         [this shutdown-request]
@@ -146,10 +149,11 @@
          args: 'shutdown-request' provides access to a checkpointer (RecordProcessorCheckpointer)
                allowing a record processor to checkpoint before the shutdown is completed."
 
-        (log/infof "scheduler for the shard %s is shutting down. recording a checkpoint.."
-                   @shard-id)
-        ;; (-> shutdown-request .checkpointer .checkpoint)
-        ))))
+        (log/infof "scheduler for the shard %s is shutting down. recording a checkpoint.." @shard-id)
+        (try
+          (-> shutdown-request .checkpointer .checkpoint)
+          (catch Exception e
+            (log/errorf e "failed to checkpoint at shutdown for %s" @shard-id)))))))
 
 (defn shard-record-processor-factory [consume
                                       checkpoint-every-ms]

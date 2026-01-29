@@ -1,3 +1,9 @@
+# 0.1.6
+
+* enable checkpointing on
+  - shard end
+  - shutdown request
+
 # 0.1.5
 
 * add support to:
