@@ -1,4 +1,4 @@
-.PHONY: clean jar tag outdated install deploy tree repl
+.PHONY: clean jar tag outdated install deploy tree repl test
 
 clean:
 	rm -rf target
@@ -24,3 +24,6 @@ tree:
 
 repl:
 	clojure -A:dev -A:repl
+
+test:
+	clojure -M:test -e "(require 'kinetic.consumer-test) (clojure.test/run-tests 'kinetic.consumer-test)"

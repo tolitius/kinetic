@@ -13,6 +13,7 @@
                                            StreamConfig]
            [software.amazon.kinesis.coordinator Scheduler]
            [software.amazon.kinesis.leases Lease]
+           [software.amazon.kinesis.metrics MetricsLevel]
            [software.amazon.kinesis.processor ShardRecordProcessor
                                               ShardRecordProcessorFactory
                                               FormerStreamsLeasesDeletionStrategy
@@ -22,6 +23,15 @@
            [software.amazon.kinesis.retrieval KinesisClientRecord
                                               polling.PollingConfig]))
 
+(defn ->metrics-level [level]
+  (cond
+    (nil? level) MetricsLevel/NONE
+    (instance? MetricsLevel level) level
+    (keyword? level) (MetricsLevel/fromName (name level))
+    (string? level) (MetricsLevel/fromName level)
+    :else (throw (IllegalArgumentException.
+                  (str "metrics-level must be a MetricsLevel, keyword, or string: " level)))))
+
 (defn make-config
   [{:keys [streams
            multi-stream?        ;; in case we need a multi stream tracking
@@ -30,22 +40,28 @@
            kinesis-client
            dynamo-client
            cloud-watch-client
+           metrics-level
            record-processor-factory] :as opts}]
   (let [multi? (or multi-stream?
-                   (> (count streams) 1))]
-    {:config-builder (ConfigsBuilder. (tracker/make-stream-tracker opts)
-                                      application-name
-                                      kinesis-client
-                                      dynamo-client
-                                      cloud-watch-client
-                                      (-> (UUID/randomUUID) str)
-                                      record-processor-factory)
+                   (> (count streams) 1))
+        config-builder (ConfigsBuilder. (tracker/make-stream-tracker opts)
+                                        application-name
+                                        kinesis-client
+                                        dynamo-client
+                                        cloud-watch-client
+                                        (-> (UUID/randomUUID) str)
+                                        record-processor-factory)
+        metrics-config (doto (.metricsConfig config-builder)
+                         (.metricsLevel (->metrics-level metrics-level)))]
+    {:config-builder config-builder
+     :metrics-config metrics-config
      :polling-config (if multi?
                        (PollingConfig. kinesis-client)
                        (PollingConfig. (-> streams first :name)
                                        kinesis-client))}))
 
 (defn make-scheduler [{:keys [config-builder
+                              metrics-config
                               polling-config]}]
 
   ;; TODO: add more params beyond the ConfigsBuilder defaults
@@ -53,7 +69,8 @@
               (.coordinatorConfig config-builder)
               (.leaseManagementConfig config-builder)
               (.lifecycleConfig config-builder)
-              (.metricsConfig config-builder)
+              (or metrics-config
+                  (.metricsConfig config-builder))
               (.processorConfig config-builder)
               (-> config-builder
                   .retrievalConfig
