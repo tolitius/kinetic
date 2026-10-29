@@ -27,3 +27,4 @@ repl:
 
 test:
 	clojure -M:test -e "(require 'kinetic.consumer-test) (clojure.test/run-tests 'kinetic.consumer-test)"
+
