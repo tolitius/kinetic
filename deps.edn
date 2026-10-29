@@ -5,6 +5,7 @@
                               org.apache.logging.log4j/log4j-slf4j2-impl {:mvn/version "2.20.0"}
                               org.apache.logging.log4j/log4j-core {:mvn/version "2.20.0"}}
                  :extra-paths ["dev" "dev/resources"]}
+           :test {:extra-paths ["test"]}
            :repl {;; :extra-paths ["test" "test/resources"]
                   :extra-deps {nrepl/nrepl {:mvn/version "0.7.0"}
                                cider/cider-nrepl {:mvn/version "0.22.4"}

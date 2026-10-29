@@ -11,6 +11,8 @@ aws kinesis client based on [amazon 2.x api](https://github.com/awslabs/amazon-k
   - [stopping consumer](#stopping-consumer)
   - [multiple streams](#multiple-streams)
   - [credentials](#credentials)
+  - [metrics](#metrics)
+
 - [license](#license)
 
 ```clojure
@@ -190,6 +192,19 @@ or can be explicitly provided to kinetic consumer:
                         :application-name "hubble"
                         :creds {:access-key-id     "AK..ZZ"          ;; <= via a "creds" map
                                 :secret-access-key "z0.........0m"}
+                        :consume k/echo}))
+```
+
+### metrics
+
+CloudWatch metrics published by the Kinesis Client Library are disabled by default.
+To enable them, set `:metrics-level` to `"SUMMARY"` or `"DETAILED"` when starting a consumer:
+
+```clojure
+=> (def consumer
+     (k/start-consumer {:streams [{:name "milky-way.solar.pluto"}]
+                        :application-name "hubble"
+                        :metrics-level "SUMMARY"
                         :consume k/echo}))
 ```
 
