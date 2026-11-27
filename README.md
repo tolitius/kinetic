@@ -9,6 +9,7 @@ aws kinesis client based on [amazon 2.x api](https://github.com/awslabs/amazon-k
   - [initial position](#initial-position)
   - [leases](#leases)
   - [stopping consumer](#stopping-consumer)
+  - [consuming by arn](#consuming-by-arn)
   - [multiple streams](#multiple-streams)
   - [credentials](#credentials)
   - [metrics](#metrics)
@@ -121,6 +122,19 @@ and the records will start arriving from yesterday until the latest one on the s
 ```clojure
 => (k/stop-consumer consumer))
 ```
+
+### consuming by arn
+
+a stream can be identified by its ARN instead of its name, which also allows consuming a stream from a different aws account (cross account), as long as the consumer's credentials are allowed to do so (e.g. via an assumed role):
+
+```clojure
+=> (def consumer
+     (k/start-consumer {:streams [{:arn "arn:aws:kinesis:us-west-2:111122223333:stream/milky-way.solar.pluto"}]
+                        :application-name "hubble"
+                        :consume k/echo}))
+```
+
+"`:arn`" is only supported in a single stream mode (i.e. one stream, no "`:multi-stream?`"); if both "`:name`" and "`:arn`" are given, "`:arn`" wins.
 
 ### multiple streams
 

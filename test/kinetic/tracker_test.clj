@@ -10,9 +10,6 @@
 
 (def arn "arn:aws:kinesis:us-west-2:123456789012:stream/events")
 
-(deftest stream-name-from-arn
-  (is (= "events" (tracker/stream-name-from-arn arn))))
-
 (deftest single-stream-identifier-arn-vs-name
   (let [by-arn (tracker/single-stream-identifier {:arn arn})
         by-name (tracker/single-stream-identifier {:name "events"})]
@@ -20,6 +17,12 @@
     (is (= "events" (.streamName by-arn)))
     (is (false? (.isPresent (.streamArnOptional by-name))))
     (is (= "events" (.streamName by-name)))))
+
+(deftest single-stream-identifier-arn-wins-over-name
+  (let [identifier (tracker/single-stream-identifier {:name "not-this-one" :arn arn})]
+    (is (true? (.isPresent (.streamArnOptional identifier))))
+    (is (= arn (str (.get (.streamArnOptional identifier)))))
+    (is (= "events" (.streamName identifier)))))
 
 (deftest make-config-polling-name-for-arn-stream
   (let [region (Region/of "us-west-2")
@@ -39,3 +42,9 @@
                       :record-processor-factory processor-factory})]
         (is (= "events" (.streamName (:polling-config config)))))
       (finally (doseq [client clients] (.close client))))))
+
+(deftest arn-rejected-in-multi-stream-mode
+  (is (thrown-with-msg? RuntimeException #"single stream mode"
+        (tracker/multi-stream-tracker {:streams [{:name "a"} {:arn arn}]})))
+  (is (thrown-with-msg? RuntimeException #"single stream mode"
+        (tracker/make-stream-tracker {:streams [{:arn arn} {:arn arn}]}))))

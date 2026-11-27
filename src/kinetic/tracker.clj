@@ -32,22 +32,19 @@
 
 ;; single stream tracker
 
-(defn stream-name-from-arn
-  "Kinesis stream ARNs look like arn:aws:kinesis:<region>:<account>:stream/<name>"
-  [arn]
-  (let [resource (.resourceAsString (Arn/fromString arn))]
-    (subs resource (count "stream/"))))
-
-(defn single-stream-identifier [{:keys [name arn]}]
+(defn single-stream-identifier
+  "if both :name and :arn are given, :arn wins"
+  [{:keys [name arn]}]
   (if arn
     (StreamIdentifier/singleStreamInstance (Arn/fromString arn))
     (StreamIdentifier/singleStreamInstance name)))
 
 (defn single-stream-tracker [{:keys [name
+                                     arn
                                      start-from] :as stream}]
 
   (log/infof "making a single stream tracker for %s stream"
-             name)
+             (or name arn))
 
   (let [stream-identifier (single-stream-identifier stream)]
     (if-not start-from
@@ -100,6 +97,9 @@
   "
   [{:keys [aws-account-number
            streams]}]
+
+  (when (some :arn streams)
+    (throw (RuntimeException. "\":arn\" is only supported in a single stream mode (for now)")))
 
   (log/infof "making a multiple streams tracker for %s streams"
              (mapv :name streams))
