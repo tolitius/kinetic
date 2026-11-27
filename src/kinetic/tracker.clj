@@ -2,6 +2,7 @@
   (:require [clojure.tools.logging :as log]
             [kinetic.tools :as t])
   (:import [java.time Duration]
+           [software.amazon.awssdk.arns Arn]
            [software.amazon.kinesis.common ConfigsBuilder
                                            InitialPositionInStream
                                            InitialPositionInStreamExtended
@@ -31,8 +32,16 @@
 
 ;; single stream tracker
 
-(defn single-stream-identifier [{:keys [name]}]
-  (StreamIdentifier/singleStreamInstance name))
+(defn stream-name-from-arn
+  "Kinesis stream ARNs look like arn:aws:kinesis:<region>:<account>:stream/<name>"
+  [arn]
+  (let [resource (.resourceAsString (Arn/fromString arn))]
+    (subs resource (count "stream/"))))
+
+(defn single-stream-identifier [{:keys [name arn]}]
+  (if arn
+    (StreamIdentifier/singleStreamInstance (Arn/fromString arn))
+    (StreamIdentifier/singleStreamInstance name)))
 
 (defn single-stream-tracker [{:keys [name
                                      start-from] :as stream}]

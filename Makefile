@@ -26,5 +26,5 @@ repl:
 	clojure -A:dev -A:repl
 
 test:
-	clojure -M:test -e "(require 'kinetic.consumer-test) (clojure.test/run-tests 'kinetic.consumer-test)"
+	clojure -M:test -e "(require 'kinetic.consumer-test 'kinetic.tracker-test) (clojure.test/run-tests 'kinetic.consumer-test 'kinetic.tracker-test)"
 

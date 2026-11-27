@@ -57,7 +57,8 @@
      :metrics-config metrics-config
      :polling-config (if multi?
                        (PollingConfig. kinesis-client)
-                       (PollingConfig. (-> streams first :name)
+                       (PollingConfig. (or (-> streams first :name)
+                                           (tracker/stream-name-from-arn (-> streams first :arn)))
                                        kinesis-client))}))
 
 (defn make-scheduler [{:keys [config-builder
